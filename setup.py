@@ -31,7 +31,6 @@ setup(
     package_dir={'pymodjson':
                  'pymodjson'},
     include_package_data=True,
-    install_requires=requirements,
     license="MIT license",
     zip_safe=False,
     keywords='pymodjson',
@@ -48,6 +47,4 @@ setup(
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
     ],
-    test_suite='tests',
-    tests_require=test_requirements
 )
