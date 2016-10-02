@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 py mod json: Python Models -> JSON
+Compatible with versions of Python2.6+ and Python3+
 
 A module which provides a basic framework to model and structure JSON objects
 as classes in Python.
@@ -8,8 +9,6 @@ as classes in Python.
 Users can extend or nest PyModJson models to achieve the desired structure
 for the responses. All while taking advantage of Python's class declaration
 syntax to easily manage, document, validate and extend the models.
-
-Compatible with versions of Python2.6+ and Python3+
 
 Use Case:
 If you need to construct JSON responses which are made up of multiple other
@@ -54,7 +53,6 @@ my_user_list = UserList(users=[usr1, usr2])
 my_user_list.to_json()  # Output would be similar to the JSON response above
 """
 import json
-import inspect
 import datetime
 
 
