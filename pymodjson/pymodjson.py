@@ -12,9 +12,9 @@ syntax to easily manage, document, validate and extend the models.
 Compatible with versions of Python2.6+ and Python3+
 
 Use Case:
-If you need to construct a JSON response which is made up of multiple other
-inner JSON segments, you can define and document classes in python that match
-your JSON segments like show below:
+If you need to construct JSON responses which are made up of multiple other
+inner JSON segments, you can define and initialize classes in Python that match
+your JSON segments like shown below:
 
 Sample JSON response:
 {
@@ -33,32 +33,138 @@ Sample JSON response:
 }
 
 Python Classes:
-class UserList(pymodjson.PyModObject):
-    users = pymodjson.ListType()
+class UserList(PyModObject):
+    users = ListType()
 
-class User(pymodjson.PyModObject):
-    name = pymodjson.StringType(alias="Name")
-    age = pymodjson.NumberType(alias="Age")
+class User(PyModObject):
+    name = StringType(alias="Name")
+    age = NumberType(alias="Age")
 
 class Student(User):
-    courses_taken = pymodjson.ListType(alias="CoursesEnrolled")
+    courses_taken = ListType(alias="CoursesEnrolled")
 
 class Professor(User):
-    courses_taught = pymodjson.ListType(alias="CoursesTaught")
+    courses_taught = ListType(alias="CoursesTaught")
 
 usr1 = Student(name="ABC", age=22)
 usr2 = Professor(name="XYZ", age=44)
 courses = ["CS 101"]
 usr1.courses_taken = usr2.courses_taught = courses
 my_user_list = UserList(users=[usr1, usr2])
-my_user_list.json()  # This should be equivalent to the example structure
+my_user_list.to_json()  # Output would be similar to the JSON response above
 """
 import json
 import inspect
 import datetime
 
 
-class PyModType(object):
+class PyModObject(object):
+    """
+    PyModObject's purpose is to mimic a JSON object.
+    Users can define custom Python models by inheriting this class and the
+    desired key, value pairs of a JSON object can be defined as
+    property(name) = PyModBaseType(value) pairs in the child class
+    """
+    def __init__(self, **kwargs):
+        """
+        Properties cannot be initialized without the property name(key)
+        If some(or all) of the properties need to be set when the object
+        is being initialized, they need to be sent as key value paris to
+        the constructor
+        """
+        # Store the initial state of user defined model in _pymod__all_props
+        # by filtering out all the magic methods from the list of attributes
+        # We also need to filter out all the callables defined
+        dir_map = dict((i, getattr(self, i)) for i in dir(self)
+                       if not (i.startswith("__") and i.endswith("__")))
+        self._pymod__all_props = dict((k, v) for k, v in dir_map.items()
+                                      if not callable(v))
+        self._pymod__active_props = set()
+
+        # Iterate over all identified user defined properties
+        for key, val in self._pymod__all_props.items():
+            # Ensure the type of the property is valid
+            if not isinstance(val, PyModBaseType):
+                raise AttributeError("Invalid Type '%s' assigned to '%s'"
+                                     % (type(val).__name__, key,))
+
+        # Now iterate over all the properties passed in at initialization
+        for key, val in kwargs.items():
+            # Check if all the properties passed into the constructor exist in
+            # the original model
+            if key not in self._pymod__all_props:
+                raise AttributeError("Undefined field '%s' passed to model" % key)
+            else:
+                # Now that the property is valid, ensure the 'value' passed in
+                # is valid per the rules defined for the property in the model
+                vcls = self._pymod__all_props.get(key)
+                vcls.validate_value(key, val)
+                # Set the validated value in this instance of the model
+                self._pymod__active_props.add(key)
+                setattr(self, key, val)
+
+    def __setattr__(self, key, value):
+        """
+        Intercepts any modifications made to the instance and validates
+        only if the key is found in the _pymod_props dict
+
+        Raises a AttributeError if the key being set doesn't exist in the
+        model or if there is a type mismatch between the value and property
+        """
+        # If modifying _pymod_props then just do the default operation
+        if key.startswith("_pymod__") or \
+           (key.startswith("__") and key.endswith("__")):
+            return super(PyModObject, self).__setattr__(key, value)
+
+        # Check if the property going to be set exists in the original set
+        if key not in self._pymod__all_props:
+            raise AttributeError("Property '%s' not defined in '%s' model"
+                                 % (key, self.__class__.__name__,))
+        # Get the validating instance for the property being set and set
+        # the value if it's valid
+        self._pymod__all_props.get(key).validate_value(key, value)
+        self._pymod__active_props.add(key)
+        super(PyModObject, self).__setattr__(key, value)
+
+    def get_as_jsonable_object(self):
+        """
+        Returns a python dictionary representing the current state of the model
+        """
+        response = {}
+        # Iterate over all the properties defined in the model
+        for key, val_config in self._pymod__all_props.items():
+            # A property is allowed to be absent from the final JSON dump
+            # as long as the 'never_null' option is'nt set for the property
+            if key not in self._pymod__active_props:
+                if val_config.never_null:
+                    raise ValueError("Found null value for 'never_null' "
+                                     "property '%s'" % key)
+                # This property can be null, so continue to the next one
+                continue
+            # If a property is set, and if it's a null value, it can be
+            # suppressed from the JSON dump if 'suppress_if_null' is set
+            value = getattr(self, key)
+            if value is None and val_config.suppress_if_null:
+                # This property will not be output, so continue
+                continue
+            # Finally for all properties that will be present in the dump
+            # check if an alias was passed in, if not use the name of the
+            # property as the key in the JSON object
+            if val_config.title:
+                key = val_config.title
+            response[key] = val_config.get_jsonable_value(value)
+        return response
+
+    def to_json(self):
+        """
+        Returns a valid JSON string. Any exceptions raised by json.dumps are
+        sent downstream as is.
+        """
+        response = self.get_as_jsonable_object()
+        return json.dumps(response)
+
+
+class PyModBaseType(object):
     """
     This is the base class for all the PyModJSON types, and all the common
     attributes for the properties are set here in the constructor.
@@ -69,8 +175,10 @@ class PyModType(object):
     Example:
         supported_py_types = (int, float, long,)
     """
+    supported_py_types = None
+
     def __init__(self, alias=None, suppress_if_null=True, never_null=False,
-                 validators=[]):
+                 validators=()):
         """"
         alias:
         The alias provided will be used as the key value for the json object,
@@ -85,7 +193,7 @@ class PyModType(object):
         that has this flag set. The JSON dump is guaranteed to have this key,
         if not, a ValueError is raised
 
-        vallidators:
+        validators:
         User can set custom validators for each property being set.
         The validator takes just the property being set as input and expects a
         boolean value to be returned.
@@ -118,9 +226,8 @@ class PyModType(object):
         # Values which are not of a know type will not be processed, since
         # the serialization to JSON will throw an exception.
         if val is not None and not isinstance(val, self.supported_py_types):
-            raise ValueError("Expected object of type '%s' found '%s' instead"
-                             % (self.__class__.__name__, type(val).__name__,))
-        return True
+            raise ValueError("Object type '%s' is not supported by '%s"
+                             % (type(val).__name__, self.__class__.__name__,))
 
     def get_jsonable_value(self, val):
         """
@@ -129,142 +236,43 @@ class PyModType(object):
         return val
 
 
-class PyModObject(object):
-    """
-    PyModObject's purpose is to mimic a JSON object.
-    Users can define custom Ptyhon models by inherting this class and the
-    key, value pairs of a JSON object can be defined as property(name),
-    PyModType(value)
-    """
-    def __init__(self, **kwargs):
-        """
-        Properties cannot be initialized without the property name(key)
-        If some(or all) of the properties need to be set when the object
-        is being initialized, they need to be sent as key value paris to
-        the constructor
-        """
-        # Store the initial state of the user defined model in _pymod_state
-        # Ensure only non callables are being identified
-        self._pymod_state = dict((i, getattr(self, i)) for i in dir(self)
-                                 if isinstance(getattr(self, i), PyModType))
-
-        # Iterate over all identified user defined properties
-        for key, val in self._pymod_state.items():
-            # Ensure the type of the property is valid
-            if not isinstance(val, PyModType):
-                raise ValueError("Invalid Type '%s' assigned to '%s'"
-                                 % (type(val).__name__, key,))
-
-            # If for this instance of the model if the property has not
-            # been defined(yet), remove it from the property list
-            if key not in kwargs:
-                self.delete_attribute(key)
-
-        # Now iterate over all the properties passes in at model initialization
-        for key, val in kwargs.items():
-            # Check if all the properties passed into the constructor exist in
-            # the original model
-            if key not in self._pymod_state:
-                raise AttributeError("Undefined field '%s' passed to model"
-                                     % key)
-            else:
-                # Now that the property is valid, ensure the 'value' passed in
-                # is valid per the rules defined for the property in the model
-                vcls = self._pymod_state.get(key)
-                vcls.validate_value(key, val)
-                # Set the validated value in this instance of the model
-                setattr(self, key, val)
-
-    def __setattr__(self, key, value):
-        """
-        Intercepts any modifications made to the instance and validates
-        the key(property name) and the value
-
-        Raises a ValueError if the key being set doesn't exist in the model
-        """
-        # If modifying _pymod_state then just do the default operation
-        if key == "_pymod_state" or \
-           (key.startswith("__") and key.endswith("__")):
-            return super(PyModObject, self).__setattr__(key, value)
-
-        # Check if the property going to be set exists in the original set
-        if key not in self._pymod_state:
-            raise ValueError("Uable to find property '%s' in '%s' model"
-                             % (key, self.__class__.__name__,))
-        # Get the validating instance for the property being set and set
-        # the value if it's valid
-        self._pymod_state.get(key).validate_value(key, value)
-        super(PyModObject, self).__setattr__(key, value)
-
-    def delete_attribute(self, key):
-        """
-        Since some of the properties can be derived from another class
-        we go over the classes in the MRO and delete the key when found
-        """
-        for cl in inspect.getmro(self.__class__):
-            if key in cl.__dict__:
-                delattr(cl, key)
-
-    def get_as_jsonable_object(self):
-        """
-        Returns a python dictionary representing the current state of the model
-        """
-        response = {}
-        # Iterate over all the properties defined in the model
-        for key, val_config in self._pymod_state.items():
-            # A property is allowed to be absent from the final JSON dump
-            # as long as the 'never_null' option is'nt set for the property
-            if not hasattr(self, key):
-                if val_config.never_null:
-                    raise ValueError("Found null value for 'never_null' "
-                                     "property '%s'" % key)
-                # This property can be null, so continue to the next one
-                continue
-            # If a property is set, and if it's a null value, it can be
-            # suppressed from the JSON dump if 'suppress_if_null' is set
-            value = getattr(self, key)
-            if value is None and val_config.suppress_if_null:
-                # This property will not be output, so continue
-                continue
-            # Finally for all properties that will be present in the dump
-            # check if an alias was passed in, if not use the name of the
-            # property as the key in the JSON object
-            if val_config.title:
-                key = val_config.title
-            response[key] = val_config.get_jsonable_value(value)
-        return response
-
-    def json(self):
-        """
-        Returns a valid JSON string. Any exceptions occuring inside json.dumps
-        are sent downstream as is.
-        """
-        response = self.get_as_jsonable_object()
-        return json.dumps(response)
+class StringType(PyModBaseType):
+    supported_py_types = (str, unicode,)
 
 
-class DateTimeType(PyModType):
+class NumberType(PyModBaseType):
+    supported_py_types = (int, float, long,)
+
+
+class BooleanType(PyModBaseType):
+    supported_py_types = (bool,)
+
+
+class DateTimeType(PyModBaseType):
     supported_py_types = (datetime.date, datetime.datetime,)
 
     def __init__(self, alias=None, hide_if_null=True, never_null=False,
-                 validators=[], format="%b %d, %Y - %H:%M:%S"):
+                 validators=(), dt_format="%b %d, %Y - %H:%M:%S"):
         """
-        In addition to the basic options, DateTimeType also accepts a format
-        option. The format is "%b %d, %Y - %H:%M:%S" by default.
+        In addition to the basic options, DateTimeType also accepts a dt_format
+        parameter. The format is "%b %d, %Y - %H:%M:%S" by default.
         Refer datetime's strftime for formatting options.
         """
         super(DateTimeType, self).__init__(alias, hide_if_null, never_null,
                                            validators)
-        self.format = format
+        self.dt_format = dt_format
 
     def get_jsonable_value(self, val):
         """
-        Converts the datetime object to string using the initialized format.
+        Converts the datetime object to string using the user supplied format.
+        'None' is returned if value is not set
+        ValueError is raised if 'dt_fomat' could not be understood by strftime
         """
-        return datetime.datetime.strftime(val, self.format)
+        if val:
+            return datetime.datetime.strftime(val, self.dt_format)
 
 
-class ListType(PyModType):
+class ListType(PyModBaseType):
     supported_py_types = (list, tuple)
 
     def _flatten(self, val_list):
@@ -314,7 +322,7 @@ class ListType(PyModType):
         return ret_val
 
 
-class PyModType(PyModType):
+class PyModObjectType(PyModBaseType):
     """
     Use this type when there is a need to generate a JSON map object
     This type can be nested as many times as needed
@@ -323,16 +331,3 @@ class PyModType(PyModType):
 
     def get_jsonable_value(self, val):
         return val.get_as_jsonable_object()
-
-
-class StringType(PyModType):
-    supported_py_types = (str, unicode,)
-
-
-class NumberType(PyModType):
-    supported_py_types = (int, float, long,)
-
-
-class BooleanType(PyModType):
-    supported_py_types = (bool,)
-
