@@ -69,13 +69,13 @@ DateTimeType:
     supported_py_types: (datetime.date, datetime.datetime)
 
 ListType:
-    supported_types: (list, tuple)
+    supported_py_types: (list, tuple)
     List type object can contain all of the types supported by the above
     mentioned types, and also the PyModObjectType within the input list
     or tuple
 
 PyModObject:
-    supported_types: PyModObject
+    supported_py_types: PyModObject
     Use this type when there is a need to generate a JSON map object
     This type can be nested as many times as needed
 
