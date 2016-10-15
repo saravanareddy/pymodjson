@@ -70,3 +70,5 @@ This package was created with Cookiecutter_ and the `audreyr/cookiecutter-pypack
 Cookiecutter: https://github.com/audreyr/cookiecutter
 `audreyr/cookiecutter-pypackage`: https://github.com/audreyr/cookiecutter-pypackage
 
+Peterl Downs, for his simple tutorial on how to submit to PyPi.
+
