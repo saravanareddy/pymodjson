@@ -2,7 +2,7 @@ from pymodjson import pymodjson
 
 
 class User(pymodjson.PyModObject):
-    name = pymodjson.StringType(never_null=True)
+    name = pymodjson.StringType(not_null=True)
     age = pymodjson.NumberType(suppress_if_null=True)
     join_dt = pymodjson.DateTimeType(dt_format="%d/%m/%Y")
 

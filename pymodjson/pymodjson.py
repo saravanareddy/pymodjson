@@ -91,7 +91,8 @@ class PyModObject(object):
             # Check if all the properties passed into the constructor exist in
             # the original model
             if key not in self._pymod__all_props:
-                raise AttributeError("Undefined field '%s' passed to model" % key)
+                raise AttributeError("Undefined field '%s' passed to model"
+                                     % key)
             else:
                 # Now that the property is valid, ensure the 'value' passed in
                 # is valid per the rules defined for the property in the model
@@ -124,18 +125,34 @@ class PyModObject(object):
         self._pymod__active_props.add(key)
         super(PyModObject, self).__setattr__(key, value)
 
+    def __delattr__(self, item):
+        # If a property is being unset we need to adjust active props list
+        if item in self._pymod__active_props:
+            self._pymod__active_props.remove(item)
+        super(PyModObject, self).__delattr__(item)
+
+    def __getattribute__(self, item):
+        if item.startswith("_pymod__"):
+            return super(PyModObject, self).__getattribute__(item)
+
+        if hasattr(self, "_pymod__all_props") and \
+                item in self._pymod__all_props and \
+                item not in self._pymod__active_props:
+            return None
+        return super(PyModObject, self).__getattribute__(item)
+
     def get_as_jsonable_object(self):
         """
-        Returns a python dictionary representing the current state of the model
+        Returns a python dictionary representing current state of the model
         """
         response = {}
         # Iterate over all the properties defined in the model
         for key, val_config in self._pymod__all_props.items():
             # A property is allowed to be absent from the final JSON dump
-            # as long as the 'never_null' option is'nt set for the property
+            # as long as the 'not_null' option is'nt set for the property
             if key not in self._pymod__active_props:
-                if val_config.never_null:
-                    raise ValueError("Found null value for 'never_null' "
+                if val_config.not_null:
+                    raise ValueError("Found null value for 'not_null' "
                                      "property '%s'" % key)
                 # This property can be null, so continue to the next one
                 continue
@@ -175,7 +192,7 @@ class PyModBaseType(object):
     """
     supported_py_types = None
 
-    def __init__(self, alias=None, suppress_if_null=True, never_null=False,
+    def __init__(self, alias=None, suppress_if_null=True, not_null=False,
                  validators=()):
         """"
         alias:
@@ -186,7 +203,7 @@ class PyModBaseType(object):
         A property will not be visible in the JSON output if the property value
         is 'None' or equates to null in python
 
-        never_null:
+        not_null:
         As the name indicates, null values are not permitted for a property
         that has this flag set. The JSON dump is guaranteed to have this key,
         if not, a ValueError is raised
@@ -198,9 +215,10 @@ class PyModBaseType(object):
             Example:
             age = NumberType(validators=[lambda age_val: 0 < age_val < 120])
         """
+        self._value = None
         self.title = alias
         self.suppress_if_null = suppress_if_null
-        self.never_null = never_null
+        self.not_null = not_null
         self.validators = validators
 
     def validate_value(self, key, val):
@@ -218,8 +236,8 @@ class PyModBaseType(object):
         if val is not None and not custom_validated:
             raise ValueError("Supplied Validator for property '%s' failed to "
                              "validate value: %s" % (key, val,))
-        if val is None and self.never_null:
-            raise ValueError("Found null value for 'never_null' property '%s'"
+        if val is None and self.not_null:
+            raise ValueError("Found null value for 'not_null' property '%s'"
                              % key)
         # Values which are not of a know type will not be processed, since
         # the serialization to JSON will throw an exception.
@@ -249,14 +267,14 @@ class BooleanType(PyModBaseType):
 class DateTimeType(PyModBaseType):
     supported_py_types = (datetime.date, datetime.datetime,)
 
-    def __init__(self, alias=None, hide_if_null=True, never_null=False,
+    def __init__(self, alias=None, hide_if_null=True, not_null=False,
                  validators=(), dt_format="%b %d, %Y - %H:%M:%S"):
         """
         In addition to the basic options, DateTimeType also accepts a dt_format
         parameter. The format is "%b %d, %Y - %H:%M:%S" by default.
         Refer datetime's strftime for formatting options.
         """
-        super(DateTimeType, self).__init__(alias, hide_if_null, never_null,
+        super(DateTimeType, self).__init__(alias, hide_if_null, not_null,
                                            validators)
         self.dt_format = dt_format
 
@@ -302,7 +320,7 @@ class ListType(PyModBaseType):
     def get_jsonable_value(self, val):
         """
         Expand the value recursively and return a fully jsonable list that
-        maintains the order of elements in the input value.
+        maintains the order of elements in the input list.
         """
         ret_val = []
         for v in val:

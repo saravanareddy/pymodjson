@@ -11,7 +11,7 @@ Tests for `pymodjson` module.
 import json
 import pytest
 from datetime import datetime
-from dummy_test_models import *
+from dummy_test_models import User, UserList, Student, Professor
 from pymodjson import pymodjson
 
 
@@ -110,7 +110,8 @@ class TestPyModObjectPropertyTypes(object):
         dt = pymodjson.DateTimeType(dt_format=dt_format)
         test_dt = datetime.today()
         dt.validate_value("test", test_dt)
-        assert dt.get_jsonable_value(test_dt) == datetime.strftime(test_dt, dt_format)
+        assert dt.get_jsonable_value(test_dt) == datetime.strftime(test_dt,
+                                                                   dt_format)
 
         with pytest.raises(ValueError):
             dt.validate_value("test", "01/01/2011")
@@ -164,9 +165,20 @@ class TestPyModObjectOutput(object):
         output = '{"name": "Test"}'
         assert user.to_json() == output
 
-    def test_raise_value_error_for_never_null_properties(self):
+    def test_raise_value_error_for_not_null_properties(self):
         with pytest.raises(ValueError):
             User().to_json()
+
+    def test_output_on_set_and_deleted_property(self):
+        class Test(pymodjson.PyModObject):
+            foo = pymodjson.StringType()
+
+        test = Test(foo="test")
+        assert test.to_json() == '{"foo": "test"}'
+
+        del test.foo
+        assert test.foo is None
+        assert test.to_json() == '{}'
 
 
 if __name__ == "__main__":
