@@ -169,7 +169,7 @@ Refer to requirements_dev.txt for the required packages.
 
 Run 'py.test --cov pymodjson/' from project root to run the tests under /tests and measure coverage.
 
-Please run `flake8 tests/` and `flake8 pymodjson` for code style compliance
+Please run `flake8 tests/` and `flake8 pymodjson/` for code style compliance
 ```
 
 

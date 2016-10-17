@@ -6,3 +6,8 @@ History
 ------------------
 
 * First release on PyPI.
+
+0.1.1 (2016-10-17)
+------------------
+
+* Fixed bug with suppress_if_null properties.
