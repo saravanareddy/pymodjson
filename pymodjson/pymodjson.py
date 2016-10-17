@@ -154,8 +154,17 @@ class PyModObject(object):
                 if val_config.not_null:
                     raise ValueError("Found null value for 'not_null' "
                                      "property '%s'" % key)
-                # This property can be null, so continue to the next one
-                continue
+
+                if val_config.suppress_if_null:
+                    # This property can be null, so continue to the next one
+                    continue
+                else:
+                    # This value has not been assigned, and suppress flag has
+                    # not been set. Hence, this property should show up in the
+                    # output with a null value
+                    response[key] = None
+                    continue
+
             # If a property is set, and if it's a null value, it can be
             # suppressed from the JSON dump if 'suppress_if_null' is set
             value = getattr(self, key)

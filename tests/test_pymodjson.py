@@ -165,6 +165,13 @@ class TestPyModObjectOutput(object):
         output = '{"name": "Test"}'
         assert user.to_json() == output
 
+    def test_output_on_suppress_if_null_property_set_to_false(self):
+        class Test(pymodjson.PyModObject):
+            foo = pymodjson.StringType(suppress_if_null=False)
+
+        test = Test()
+        assert test.to_json() == '{"foo": null}'
+
     def test_raise_value_error_for_not_null_properties(self):
         with pytest.raises(ValueError):
             User().to_json()

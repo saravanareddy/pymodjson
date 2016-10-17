@@ -5,7 +5,7 @@ pymodjson provides a framework to model JSON objects as classes in Python
 
 
 * Free software: MIT license
-
+* Works with versions of Python 2.6+ and all Python3 versions.
 
 ## UseCase
 
@@ -167,7 +167,9 @@ Refer datetime's strftime for formatting options.
 ```
 Refer to requirements_dev.txt for the required packages.
 
-run 'py.test' from project root to run the tests under /tests
+Run 'py.test --cov pymodjson/' from project root to run the tests under /tests and measure coverage.
+
+Please run `flake8 tests/` and `flake8 pymodjson` for code style compliance
 ```
 
 
