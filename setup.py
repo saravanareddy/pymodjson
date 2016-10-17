@@ -6,7 +6,7 @@ from distutils.core import setup
 setup(
     name='pymodjson',
     packages=['pymodjson'],
-    version='0.1',
+    version='0.1.1',
     description='A simple framework to model JSON objects as Python classes.',
     author='Saravana N Siddhavarapu',
     author_email='saravanareddys@gmail.com',
