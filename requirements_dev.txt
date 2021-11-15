@@ -1,4 +1,4 @@
-pip==8.1.2
+pip==21.1
 flake8==2.6.0
 coverage==4.1
 pytest==2.9.2
